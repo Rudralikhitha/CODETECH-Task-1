@@ -1,0 +1,78 @@
+import pandas as pd
+     
+
+# @title Example form fields
+# @markdown Forms support many types of fields.
+
+no_type_checking = ''  # @param
+string_type = 'example'  # @param {type: "string"}
+slider_value = 142  # @param {type: "slider", min: 100, max: 200}
+number = 102  # @param {type: "number"}
+date = '2010-11-05'  # @param {type: "date"}
+pick_me = "monday"  # @param ['monday', 'tuesday', 'wednesday', 'thursday']
+select_or_input = "apples" # @param ["apples", "bananas", "oranges"] {allow-input: true}
+# @markdown ---
+     
+
+data = pd.read_csv('/content/IMDB Dataset (1).csv')
+     
+
+print(data.head())
+     
+                                              review sentiment
+0  One of the other reviewers has mentioned that ...  positive
+1  A wonderful little production. <br /><br />The...  positive
+2  I thought this was a wonderful way to spend ti...  positive
+3  Basically there's a family where a little boy ...  negative
+4  Petter Mattei's "Love in the Time of Money" is...  positive
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+label_encoder = LabelEncoder()
+data['sentiment'] = label_encoder.fit_transform(data['sentiment'])  # positive=1, negative=0
+X_train, X_test, y_train, y_test = train_test_split(
+    data['review'], data['sentiment'], test_size=0.2, random_state=42
+)
+max_vocab_size = 10000
+max_sequence_length = 200
+tokenizer = Tokenizer(num_words=max_vocab_size)
+tokenizer.fit_on_texts(X_train)
+X_train_seq = tokenizer.texts_to_sequences(X_train)
+X_test_seq = tokenizer.texts_to_sequences(X_test)
+
+X_train_padded = pad_sequences(X_train_seq, maxlen=max_sequence_length, padding='post')
+X_test_padded = pad_sequences(X_test_seq, maxlen=max_sequence_length, padding='post')
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Embedding, LSTM, Dense, Dropout
+model = Sequential([
+    Embedding(input_dim=max_vocab_size, output_dim=128, input_length=max_sequence_length),
+    LSTM(64, return_sequences=False),
+    Dropout(0.5),
+    Dense(64, activation='relu'),
+    Dropout(0.5),
+    Dense(1, activation='sigmoid')  # Sigmoid for binary classification
+])
+model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+model.summary()
+history = model.fit(
+    X_train_padded, y_train,
+    epochs=5,
+    batch_size=64,
+    validation_data=(X_test_padded, y_test),
+    verbose=2
+)
+from sklearn.metrics import classification_report
+test_loss, test_accuracy = model.evaluate(X_test_padded, y_test, verbose=0)
+print(f"Test Accuracy: {test_accuracy:.2f}")
+predictions = (model.predict(X_test_padded) > 0.5).astype("int32")
+print(classification_report(y_test, predictions))
+model.save('kaggle_sentiment_model.h5')
+from tensorflow.keras.models import load_model
+model = load_model('kaggle_sentiment_model.h5')
+sample_review = ["The plot was engaging and characters were well-developed."]
+sample_sequence = tokenizer.texts_to_sequences(sample_review)
+sample_padded = pad_sequences(sample_sequence, maxlen=max_sequence_length, padding='post')
+prediction = model.predict(sample_padded)
+print("Positive" if prediction[0] > 0.5 else "Negative")
+
